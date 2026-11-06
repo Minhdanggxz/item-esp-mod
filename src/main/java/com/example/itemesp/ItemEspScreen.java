@@ -13,7 +13,6 @@ public class ItemEspScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget idField;
     private int topY;
-    private int colorY;
     private int listY;
     private String status = "";
 
@@ -26,41 +25,43 @@ public class ItemEspScreen extends Screen {
     protected void init() {
         ItemEspConfig c = ItemEspClient.config;
         int cx = width / 2;
-        int w = 200;
+        int hw = 98;
+        int lx = cx - 100;
+        int rx = cx + 2;
         int step = 22;
-        int y = Math.max(28, height / 2 - 99);
+        int y = Math.max(24, height / 2 - 80);
         topY = y;
 
         addDrawableChild(ButtonWidget.builder(enabledText(c), b -> {
             c.enabled = !c.enabled;
             c.save();
             b.setMessage(enabledText(c));
-        }).dimensions(cx - w / 2, y, w, 20).build());
+        }).dimensions(lx, y, hw, 20).build());
+        addDrawableChild(ButtonWidget.builder(tracerText(c), b -> {
+            c.tracers = !c.tracers;
+            c.save();
+            b.setMessage(tracerText(c));
+        }).dimensions(rx, y, hw, 20).build());
         y += step;
 
         addDrawableChild(ButtonWidget.builder(displayText(c), b -> {
             c.mode = (c.mode + 1) % 3;
             c.save();
             b.setMessage(displayText(c));
-        }).dimensions(cx - w / 2, y, w, 20).build());
-        y += step;
-
+        }).dimensions(lx, y, hw, 20).build());
         addDrawableChild(ButtonWidget.builder(modeText(c), b -> {
             c.onlySome = !c.onlySome;
             c.save();
             b.setMessage(modeText(c));
-        }).dimensions(cx - w / 2, y, w, 20).build());
+        }).dimensions(rx, y, hw, 20).build());
         y += step;
 
         addDrawableChild(ButtonWidget.builder(colorModeText(c), b -> {
             c.dynamicColor = !c.dynamicColor;
             c.save();
             b.setMessage(colorModeText(c));
-        }).dimensions(cx - w / 2, y, w, 20).build());
-        y += step;
-
-        colorY = y;
-        TextFieldWidget colorField = new TextFieldWidget(textRenderer, cx + 4, y, w / 2 - 4, 20, Text.empty());
+        }).dimensions(lx, y, hw, 20).build());
+        TextFieldWidget colorField = new TextFieldWidget(textRenderer, rx, y, hw, 20, Text.empty());
         colorField.setMaxLength(7);
         colorField.setText(String.format("%06X", c.color));
         colorField.setChangedListener(s -> {
@@ -73,19 +74,17 @@ public class ItemEspScreen extends Screen {
         addDrawableChild(colorField);
         y += step;
 
-        addDrawableChild(new ValueSlider(cx - w / 2, y, w, 20, "Tầm tối đa (0 = vô hạn)", 256, c.maxDistance, v -> {
+        addDrawableChild(new ValueSlider(lx, y, hw, 20, "Tầm xa", 256, c.maxDistance, v -> {
             c.maxDistance = v;
             c.save();
         }));
-        y += step;
-
-        addDrawableChild(new ValueSlider(cx - w / 2, y, w, 20, "Bắt đầu mờ", 256, c.fadeDistance, v -> {
+        addDrawableChild(new ValueSlider(rx, y, hw, 20, "Mờ từ", 256, c.fadeDistance, v -> {
             c.fadeDistance = v;
             c.save();
         }));
         y += step;
 
-        idField = new TextFieldWidget(textRenderer, cx - w / 2, y, 140, 20, Text.empty());
+        idField = new TextFieldWidget(textRenderer, lx, y, 140, 20, Text.empty());
         idField.setMaxLength(100);
         addDrawableChild(idField);
         addDrawableChild(ButtonWidget.builder(Text.literal("+"), b -> {
@@ -97,22 +96,22 @@ public class ItemEspScreen extends Screen {
             idField.setText("");
         }).dimensions(cx + 74, y, 26, 20).build());
         y += step;
+
         listY = y;
-        y += step;
+        y += 14;
 
         addDrawableChild(ButtonWidget.builder(Text.literal("Xong"), b -> close())
-                .dimensions(cx - w / 2, y, w, 20).build());
+                .dimensions(lx, y, 200, 20).build());
     }
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         super.render(context, mouseX, mouseY, delta);
         int cx = width / 2;
-        context.drawCenteredTextWithShadow(textRenderer, title, cx, topY - 14, 0xFFFFFF);
-        context.drawTextWithShadow(textRenderer, "Màu tĩnh (hex):", cx - 100, colorY + 6, 0xFFFFFF);
+        context.drawCenteredTextWithShadow(textRenderer, title, cx, topY - 12, 0xFFFFFF);
         String line = "Danh sách: " + ItemEspClient.config.items.size() + " item"
                 + (status.isEmpty() ? "" : " | " + status);
-        context.drawCenteredTextWithShadow(textRenderer, line, cx, listY + 6, 0xAAAAAA);
+        context.drawCenteredTextWithShadow(textRenderer, line, cx, listY + 3, 0xAAAAAA);
     }
 
     @Override
@@ -124,17 +123,21 @@ public class ItemEspScreen extends Screen {
         return Text.literal("ItemESP: " + (c.enabled ? "BẬT" : "TẮT"));
     }
 
+    private static Text tracerText(ItemEspConfig c) {
+        return Text.literal("Tracer: " + (c.tracers ? "BẬT" : "TẮT"));
+    }
+
     private static Text displayText(ItemEspConfig c) {
         String[] names = {"Viền", "Name tag", "Cả hai"};
-        return Text.literal("Hiển thị: " + names[Math.floorMod(c.mode, 3)]);
+        return Text.literal("Kiểu: " + names[Math.floorMod(c.mode, 3)]);
     }
 
     private static Text modeText(ItemEspConfig c) {
-        return Text.literal("Lọc: " + (c.onlySome ? "Theo danh sách" : "Tất cả"));
+        return Text.literal("Lọc: " + (c.onlySome ? "Danh sách" : "Tất cả"));
     }
 
     private static Text colorModeText(ItemEspConfig c) {
-        return Text.literal("Màu: " + (c.dynamicColor ? "Động (theo item)" : "Tĩnh"));
+        return Text.literal("Màu: " + (c.dynamicColor ? "Động" : "Tĩnh"));
     }
 
     private static class ValueSlider extends SliderWidget {
