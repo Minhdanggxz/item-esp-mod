@@ -11,6 +11,7 @@ import java.util.Set;
 
 public class ItemEspConfig {
     public boolean enabled = true;
+    public int mode = 1;
     public boolean onlySome = false;
     public double maxDistance = 0;
     public double fadeDistance = 0;
