@@ -13,7 +13,6 @@ import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.render.Camera;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.item.Item;
@@ -33,8 +32,6 @@ public class ItemEspClient implements ClientModInitializer {
     public static ItemEspConfig config = new ItemEspConfig();
     private static KeyBinding openKey;
     private static final Map<Item, Integer> DYNAMIC_CACHE = new HashMap<>();
-    private static final Map<Integer, String> LABELED = new HashMap<>();
-    private static ClientWorld lastWorld;
 
     @Override
     public void onInitializeClient() {
@@ -42,7 +39,7 @@ public class ItemEspClient implements ClientModInitializer {
         openKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.itemesp.open", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_CONTROL, "category.itemesp"));
         ClientTickEvents.END_CLIENT_TICK.register(ItemEspClient::tick);
-        HudRenderCallback.EVENT.register((ctx, tickCounter) -> renderTracers(ctx));
+        HudRenderCallback.EVENT.register((ctx, tickCounter) -> renderHud(ctx));
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
                 ClientCommandManager.literal("itemesp")
@@ -81,51 +78,23 @@ public class ItemEspClient implements ClientModInitializer {
         if (mc.world == null || mc.player == null) {
             return;
         }
-        if (mc.world != lastWorld) {
-            LABELED.clear();
-            lastWorld = mc.world;
-        }
         while (openKey.wasPressed()) {
             mc.setScreen(new ItemEspScreen(null));
         }
-        ItemEspConfig c = config;
-        for (Entity e : mc.world.getEntities()) {
-            if (e instanceof ItemEntity ie) {
-                boolean want = shouldShow(mc, ie);
-                boolean glow = want && (c.mode == 0 || c.mode == 2);
-                if (ie.isGlowing() != glow) {
-                    ie.setGlowing(glow);
-                }
-                boolean tag = want && (c.mode == 1 || c.mode == 2);
-                updateTag(ie, tag);
-            }
-        }
     }
 
-    private static void updateTag(ItemEntity ie, boolean tag) {
-        int id = ie.getId();
-        if (tag) {
-            int rgb = baseColor(ie);
-            ItemStack stack = ie.getStack();
-            String text = stack.getName().getString() + (stack.getCount() > 1 ? " x" + stack.getCount() : "");
-            String key = text + "#" + rgb;
-            if (!key.equals(LABELED.get(id))) {
-                ie.setCustomName(Text.literal(text).styled(st -> st.withColor(rgb)));
-                ie.setCustomNameVisible(true);
-                LABELED.put(id, key);
-            }
-        } else if (LABELED.remove(id) != null) {
-            ie.setCustomName(null);
-            ie.setCustomNameVisible(false);
-        }
-    }
-
-    private static void renderTracers(DrawContext ctx) {
+    private static void renderHud(DrawContext ctx) {
         MinecraftClient mc = MinecraftClient.getInstance();
         ItemEspConfig c = config;
-        if (!c.enabled || !c.tracers || mc.world == null || mc.player == null) {
+        if (!c.enabled || mc.world == null || mc.player == null) {
             return;
         }
+        boolean box = c.mode == 0 || c.mode == 2;
+        boolean tag = c.mode == 1 || c.mode == 2;
+        if (!c.tracers && !box && !tag) {
+            return;
+        }
+
         Camera cam = mc.gameRenderer.getCamera();
         Vec3d cp = cam.getPos();
         double yaw = Math.toRadians(cam.getYaw());
@@ -160,10 +129,12 @@ public class ItemEspClient implements ClientModInitializer {
             double z = dx * fx + dy * fy + dz * fz;
             double x = dx * rx + dz * rz;
             double y = dx * ux + dy * uy + dz * uz;
+            int argb = 0xFF000000 | baseColor(ie);
 
+            boolean front = z > 0.05;
             float ex;
             float ey;
-            if (z > 0.05) {
+            if (front) {
                 ex = (float) (centerX + (x / z) / (tanHalf * aspect) * (w / 2.0));
                 ey = (float) (centerY - (y / z) / tanHalf * (h / 2.0));
             } else {
@@ -173,15 +144,54 @@ public class ItemEspClient implements ClientModInitializer {
                 ex = (float) (centerX + nx * 3000);
                 ey = (float) (centerY + ny * 3000);
             }
-            float vx = ex - centerX;
-            float vy = ey - centerY;
-            float m = Math.max(Math.abs(vx), Math.abs(vy));
-            if (m > 3000f) {
-                ex = centerX + vx * 3000f / m;
-                ey = centerY + vy * 3000f / m;
+
+            if (front && ex > -100 && ex < w + 100 && ey > -100 && ey < h + 100) {
+                double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                int half = (int) MathHelper.clamp(0.3 / (z * tanHalf) * (h / 2.0), 3, 150);
+                if (box) {
+                    drawBox(ctx, ex, ey, half, argb);
+                }
+                if (tag) {
+                    drawTag(ctx, mc, ie, ex, ey - half, dist, argb);
+                }
             }
-            drawLine(ctx, centerX, centerY, ex, ey, 0xFF000000 | baseColor(ie));
+
+            if (c.tracers) {
+                float vx = ex - centerX;
+                float vy = ey - centerY;
+                float m = Math.max(Math.abs(vx), Math.abs(vy));
+                if (m > 3000f) {
+                    ex = centerX + vx * 3000f / m;
+                    ey = centerY + vy * 3000f / m;
+                }
+                drawLine(ctx, centerX, centerY, ex, ey, argb);
+            }
         }
+    }
+
+    private static void drawBox(DrawContext ctx, float cx, float cy, int half, int argb) {
+        int x1 = (int) cx - half;
+        int x2 = (int) cx + half;
+        int y1 = (int) cy - half;
+        int y2 = (int) cy + half;
+        ctx.fill(x1, y1, x2, y1 + 1, argb);
+        ctx.fill(x1, y2 - 1, x2, y2, argb);
+        ctx.fill(x1, y1, x1 + 1, y2, argb);
+        ctx.fill(x2 - 1, y1, x2, y2, argb);
+    }
+
+    private static void drawTag(DrawContext ctx, MinecraftClient mc, ItemEntity ie, float x, float y, double dist, int argb) {
+        ItemStack stack = ie.getStack();
+        String text = stack.getName().getString()
+                + (stack.getCount() > 1 ? " x" + stack.getCount() : "")
+                + " " + (int) dist + "m";
+        float scale = (float) MathHelper.clamp(12.0 / Math.max(dist, 1.0), 0.6, 1.2);
+        MatrixStack ms = ctx.getMatrices();
+        ms.push();
+        ms.translate(x, y - 10 * scale, 0f);
+        ms.scale(scale, scale, 1f);
+        ctx.drawCenteredTextWithShadow(mc.textRenderer, Text.literal(text), 0, 0, argb);
+        ms.pop();
     }
 
     private static void drawLine(DrawContext ctx, float x1, float y1, float x2, float y2, int argb) {
@@ -235,11 +245,7 @@ public class ItemEspClient implements ClientModInitializer {
     }
 
     public static Integer colorFor(ItemEntity ie) {
-        ItemEspConfig c = config;
-        if (c == null || !c.enabled || c.mode == 1 || MinecraftClient.getInstance().player == null) {
-            return null;
-        }
-        return baseColor(ie);
+        return null;
     }
 
     private static int hashColor(Item item) {
