@@ -9,9 +9,11 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
@@ -25,6 +27,8 @@ public class ItemEspClient implements ClientModInitializer {
     public static ItemEspConfig config = new ItemEspConfig();
     private static KeyBinding openKey;
     private static final Map<Item, Integer> DYNAMIC_CACHE = new HashMap<>();
+    private static final Map<Integer, String> LABELED = new HashMap<>();
+    private static ClientWorld lastWorld;
 
     @Override
     public void onInitializeClient() {
@@ -70,20 +74,46 @@ public class ItemEspClient implements ClientModInitializer {
         if (mc.world == null || mc.player == null) {
             return;
         }
+        if (mc.world != lastWorld) {
+            LABELED.clear();
+            lastWorld = mc.world;
+        }
         while (openKey.wasPressed()) {
             mc.setScreen(new ItemEspScreen(null));
         }
+        ItemEspConfig c = config;
         for (Entity e : mc.world.getEntities()) {
             if (e instanceof ItemEntity ie) {
-                boolean want = shouldGlow(mc, ie);
-                if (ie.isGlowing() != want) {
-                    ie.setGlowing(want);
+                boolean want = shouldShow(mc, ie);
+                boolean glow = want && (c.mode == 0 || c.mode == 2);
+                if (ie.isGlowing() != glow) {
+                    ie.setGlowing(glow);
                 }
+                boolean tag = want && (c.mode == 1 || c.mode == 2);
+                updateTag(ie, tag);
             }
         }
     }
 
-    private static boolean shouldGlow(MinecraftClient mc, ItemEntity ie) {
+    private static void updateTag(ItemEntity ie, boolean tag) {
+        int id = ie.getId();
+        if (tag) {
+            int rgb = baseColor(ie);
+            ItemStack stack = ie.getStack();
+            String text = stack.getName().getString() + (stack.getCount() > 1 ? " x" + stack.getCount() : "");
+            String key = text + "#" + rgb;
+            if (!key.equals(LABELED.get(id))) {
+                ie.setCustomName(Text.literal(text).styled(st -> st.withColor(rgb)));
+                ie.setCustomNameVisible(true);
+                LABELED.put(id, key);
+            }
+        } else if (LABELED.remove(id) != null) {
+            ie.setCustomName(null);
+            ie.setCustomNameVisible(false);
+        }
+    }
+
+    private static boolean shouldShow(MinecraftClient mc, ItemEntity ie) {
         ItemEspConfig c = config;
         if (!c.enabled) {
             return false;
@@ -98,16 +128,13 @@ public class ItemEspClient implements ClientModInitializer {
         return true;
     }
 
-    public static Integer colorFor(ItemEntity ie) {
+    private static int baseColor(ItemEntity ie) {
         ItemEspConfig c = config;
         MinecraftClient mc = MinecraftClient.getInstance();
-        if (c == null || !c.enabled || mc.player == null) {
-            return null;
-        }
         int rgb = c.dynamicColor
                 ? DYNAMIC_CACHE.computeIfAbsent(ie.getStack().getItem(), ItemEspClient::hashColor)
                 : c.color;
-        if (c.maxDistance > 0 && c.fadeDistance > 0 && c.fadeDistance < c.maxDistance) {
+        if (mc.player != null && c.maxDistance > 0 && c.fadeDistance > 0 && c.fadeDistance < c.maxDistance) {
             double d = mc.player.distanceTo(ie);
             if (d > c.fadeDistance) {
                 double t = Math.min(1.0, (d - c.fadeDistance) / (c.maxDistance - c.fadeDistance));
@@ -119,6 +146,14 @@ public class ItemEspClient implements ClientModInitializer {
             }
         }
         return rgb;
+    }
+
+    public static Integer colorFor(ItemEntity ie) {
+        ItemEspConfig c = config;
+        if (c == null || !c.enabled || c.mode == 1 || MinecraftClient.getInstance().player == null) {
+            return null;
+        }
+        return baseColor(ie);
     }
 
     private static int hashColor(Item item) {
@@ -161,4 +196,4 @@ public class ItemEspClient implements ClientModInitializer {
         config.save();
         return removed ? "Đã xoá " + id : id + " không có trong danh sách";
     }
-          }
+        }
