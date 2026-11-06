@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "itemesp",
+  "version": "${version}",
+  "name": "ItemESP",
+  "description": "Vien sang do roi duoi dat xuyen tuong.",
+  "authors": [],
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.example.itemesp.ItemEspClient"]
+  },
+  "mixins": ["itemesp.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.4",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
