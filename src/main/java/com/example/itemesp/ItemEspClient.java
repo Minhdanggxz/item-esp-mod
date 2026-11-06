@@ -6,9 +6,13 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.render.Camera;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.ItemEntity;
@@ -18,6 +22,8 @@ import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.RotationAxis;
+import net.minecraft.util.math.Vec3d;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.HashMap;
@@ -36,6 +42,7 @@ public class ItemEspClient implements ClientModInitializer {
         openKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.itemesp.open", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_CONTROL, "category.itemesp"));
         ClientTickEvents.END_CLIENT_TICK.register(ItemEspClient::tick);
+        HudRenderCallback.EVENT.register((ctx, tickCounter) -> renderTracers(ctx));
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
                 ClientCommandManager.literal("itemesp")
@@ -111,6 +118,85 @@ public class ItemEspClient implements ClientModInitializer {
             ie.setCustomName(null);
             ie.setCustomNameVisible(false);
         }
+    }
+
+    private static void renderTracers(DrawContext ctx) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        ItemEspConfig c = config;
+        if (!c.enabled || !c.tracers || mc.world == null || mc.player == null) {
+            return;
+        }
+        Camera cam = mc.gameRenderer.getCamera();
+        Vec3d cp = cam.getPos();
+        double yaw = Math.toRadians(cam.getYaw());
+        double pitch = Math.toRadians(cam.getPitch());
+        double sy = Math.sin(yaw);
+        double cy = Math.cos(yaw);
+        double sp = Math.sin(pitch);
+        double cpi = Math.cos(pitch);
+        double fx = -sy * cpi;
+        double fy = -sp;
+        double fz = cy * cpi;
+        double rx = -cy;
+        double rz = -sy;
+        double ux = -sy * sp;
+        double uy = cpi;
+        double uz = cy * sp;
+
+        int w = mc.getWindow().getScaledWidth();
+        int h = mc.getWindow().getScaledHeight();
+        float centerX = w / 2f;
+        float centerY = h / 2f;
+        double tanHalf = Math.tan(Math.toRadians(mc.options.getFov().getValue()) / 2.0);
+        double aspect = (double) w / h;
+
+        for (Entity e : mc.world.getEntities()) {
+            if (!(e instanceof ItemEntity ie) || !shouldShow(mc, ie)) {
+                continue;
+            }
+            double dx = ie.getX() - cp.x;
+            double dy = ie.getY() + ie.getHeight() / 2.0 - cp.y;
+            double dz = ie.getZ() - cp.z;
+            double z = dx * fx + dy * fy + dz * fz;
+            double x = dx * rx + dz * rz;
+            double y = dx * ux + dy * uy + dz * uz;
+
+            float ex;
+            float ey;
+            if (z > 0.05) {
+                ex = (float) (centerX + (x / z) / (tanHalf * aspect) * (w / 2.0));
+                ey = (float) (centerY - (y / z) / tanHalf * (h / 2.0));
+            } else {
+                double len = Math.sqrt(x * x + y * y);
+                double nx = len < 1e-6 ? 0 : x / len;
+                double ny = len < 1e-6 ? 1 : -y / len;
+                ex = (float) (centerX + nx * 3000);
+                ey = (float) (centerY + ny * 3000);
+            }
+            float vx = ex - centerX;
+            float vy = ey - centerY;
+            float m = Math.max(Math.abs(vx), Math.abs(vy));
+            if (m > 3000f) {
+                ex = centerX + vx * 3000f / m;
+                ey = centerY + vy * 3000f / m;
+            }
+            drawLine(ctx, centerX, centerY, ex, ey, 0xFF000000 | baseColor(ie));
+        }
+    }
+
+    private static void drawLine(DrawContext ctx, float x1, float y1, float x2, float y2, int argb) {
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float len = (float) Math.sqrt(dx * dx + dy * dy);
+        if (len < 1f) {
+            return;
+        }
+        MatrixStack ms = ctx.getMatrices();
+        ms.push();
+        ms.translate(x1, y1, 0f);
+        ms.multiply(RotationAxis.POSITIVE_Z.rotation((float) Math.atan2(dy, dx)));
+        ctx.fill(0, 0, (int) Math.ceil(len), 1, argb);
+        ms.pop();
     }
 
     private static boolean shouldShow(MinecraftClient mc, ItemEntity ie) {
@@ -196,4 +282,4 @@ public class ItemEspClient implements ClientModInitializer {
         config.save();
         return removed ? "Đã xoá " + id : id + " không có trong danh sách";
     }
-        }
+}
