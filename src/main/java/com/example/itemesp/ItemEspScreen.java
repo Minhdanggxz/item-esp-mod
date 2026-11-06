@@ -27,7 +27,8 @@ public class ItemEspScreen extends Screen {
         ItemEspConfig c = ItemEspClient.config;
         int cx = width / 2;
         int w = 200;
-        int y = Math.max(34, height / 2 - 98);
+        int step = 22;
+        int y = Math.max(28, height / 2 - 99);
         topY = y;
 
         addDrawableChild(ButtonWidget.builder(enabledText(c), b -> {
@@ -35,21 +36,28 @@ public class ItemEspScreen extends Screen {
             c.save();
             b.setMessage(enabledText(c));
         }).dimensions(cx - w / 2, y, w, 20).build());
-        y += 24;
+        y += step;
+
+        addDrawableChild(ButtonWidget.builder(displayText(c), b -> {
+            c.mode = (c.mode + 1) % 3;
+            c.save();
+            b.setMessage(displayText(c));
+        }).dimensions(cx - w / 2, y, w, 20).build());
+        y += step;
 
         addDrawableChild(ButtonWidget.builder(modeText(c), b -> {
             c.onlySome = !c.onlySome;
             c.save();
             b.setMessage(modeText(c));
         }).dimensions(cx - w / 2, y, w, 20).build());
-        y += 24;
+        y += step;
 
         addDrawableChild(ButtonWidget.builder(colorModeText(c), b -> {
             c.dynamicColor = !c.dynamicColor;
             c.save();
             b.setMessage(colorModeText(c));
         }).dimensions(cx - w / 2, y, w, 20).build());
-        y += 24;
+        y += step;
 
         colorY = y;
         TextFieldWidget colorField = new TextFieldWidget(textRenderer, cx + 4, y, w / 2 - 4, 20, Text.empty());
@@ -63,19 +71,19 @@ public class ItemEspScreen extends Screen {
             }
         });
         addDrawableChild(colorField);
-        y += 24;
+        y += step;
 
         addDrawableChild(new ValueSlider(cx - w / 2, y, w, 20, "Tầm tối đa (0 = vô hạn)", 256, c.maxDistance, v -> {
             c.maxDistance = v;
             c.save();
         }));
-        y += 24;
+        y += step;
 
         addDrawableChild(new ValueSlider(cx - w / 2, y, w, 20, "Bắt đầu mờ", 256, c.fadeDistance, v -> {
             c.fadeDistance = v;
             c.save();
         }));
-        y += 24;
+        y += step;
 
         idField = new TextFieldWidget(textRenderer, cx - w / 2, y, 140, 20, Text.empty());
         idField.setMaxLength(100);
@@ -88,9 +96,9 @@ public class ItemEspScreen extends Screen {
             status = ItemEspClient.removeItem(idField.getText());
             idField.setText("");
         }).dimensions(cx + 74, y, 26, 20).build());
-        y += 24;
+        y += step;
         listY = y;
-        y += 24;
+        y += step;
 
         addDrawableChild(ButtonWidget.builder(Text.literal("Xong"), b -> close())
                 .dimensions(cx - w / 2, y, w, 20).build());
@@ -100,7 +108,7 @@ public class ItemEspScreen extends Screen {
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         super.render(context, mouseX, mouseY, delta);
         int cx = width / 2;
-        context.drawCenteredTextWithShadow(textRenderer, title, cx, topY - 16, 0xFFFFFF);
+        context.drawCenteredTextWithShadow(textRenderer, title, cx, topY - 14, 0xFFFFFF);
         context.drawTextWithShadow(textRenderer, "Màu tĩnh (hex):", cx - 100, colorY + 6, 0xFFFFFF);
         String line = "Danh sách: " + ItemEspClient.config.items.size() + " item"
                 + (status.isEmpty() ? "" : " | " + status);
@@ -114,6 +122,11 @@ public class ItemEspScreen extends Screen {
 
     private static Text enabledText(ItemEspConfig c) {
         return Text.literal("ItemESP: " + (c.enabled ? "BẬT" : "TẮT"));
+    }
+
+    private static Text displayText(ItemEspConfig c) {
+        String[] names = {"Viền", "Name tag", "Cả hai"};
+        return Text.literal("Hiển thị: " + names[Math.floorMod(c.mode, 3)]);
     }
 
     private static Text modeText(ItemEspConfig c) {
